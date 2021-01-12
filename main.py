@@ -1,8 +1,3 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
 import asyncio
 import curses
 import time
@@ -33,7 +28,7 @@ async def sleep(delay_tic=1):
 async def animate_spaceship(canvas, row, column):
     row = round(row)
     column = round(column)
-    for item in cycle([frame1, frame2]):
+    for item in cycle([frame1, frame1, frame2, frame2]):
         rows_direction, columns_direction, space_pressed = read_controls(
             canvas)
         frame_rows, frame_columns = get_frame_size(item)
