@@ -1,5 +1,6 @@
 import asyncio
 import curses
+import random
 import time
 from collections import namedtuple
 from itertools import cycle
@@ -122,12 +123,13 @@ def draw(canvas):
     play_canvas = get_play_canvas(canvas)
     center = play_canvas.rows.max / 2, play_canvas.columns.max / 2
 
-    coroutines = [blink(canvas, randint(*play_canvas.rows),
+    coroutines.extend([blink(canvas, randint(*play_canvas.rows),
                         randint(*play_canvas.columns),
                         symbol=choice(SYMBOL_STARS)) for _ in
-                  range(COUNT_STARS)]
+                  range(COUNT_STARS)])
     coroutines.append(fire(canvas, *center))
     coroutines.append(animate_spaceship(canvas, *center))
+    coroutines.append(fill_orbit_with_garbage(canvas, play_canvas.columns.max))
 
     while True:
         for coroutine in coroutines.copy():
@@ -137,15 +139,51 @@ def draw(canvas):
                 coroutines.remove(coroutine)
         if len(coroutines) == 0:
             break
+        canvas.border()
         canvas.refresh()
         time.sleep(TIC_TIMEOUT)
 
 
+async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+    """Animate garbage, flying from top to bottom. Сolumn position will stay same, as specified on start."""
+    rows_number, columns_number = canvas.getmaxyx()
+
+    column = max(column, 0)
+    column = min(column, columns_number - 1)
+
+    row = 0
+
+    while row < rows_number:
+        draw_frame(canvas, row, column, garbage_frame)
+        await sleep()
+        draw_frame(canvas, row, column, garbage_frame, negative=True)
+        row += speed
+
+
+async def fill_orbit_with_garbage(canvas, columns):
+    while True:
+        random_column = randint(1, columns - 1)
+        coroutines.append(fly_garbage(canvas, column=random_column, garbage_frame=choice(trash)))
+        for _ in range(10):
+            await sleep()
+
 if __name__ == '__main__':
     with open(f"{PATH_FRAMES}/rocket_frame_1.txt", "r") as rocket_frame_1, \
-            open(f"{PATH_FRAMES}/rocket_frame_2.txt", "r") as rocket_frame_2:
+            open(f"{PATH_FRAMES}/rocket_frame_2.txt", "r") as rocket_frame_2, \
+            open(f"{PATH_FRAMES}/hubble.txt", "r") as hubble_frame, \
+            open(f"{PATH_FRAMES}/lamp.txt", "r") as lamp_frame, \
+            open(f"{PATH_FRAMES}/trash_large.txt", "r") as trash_large_frame, \
+            open(f"{PATH_FRAMES}/trash_small.txt", "r") as trash_small_frame, \
+            open(f"{PATH_FRAMES}/trash_xl.txt", "r") as trash_xl_frame, \
+            open(f"{PATH_FRAMES}/duck.txt", "r") as duck_frame:
         frame1 = rocket_frame_1.read()
         frame2 = rocket_frame_2.read()
-
+        duck = duck_frame.read()
+        lamp = lamp_frame.read()
+        trash_large = trash_large_frame.read()
+        trash_small = trash_small_frame.read()
+        trash_xl = trash_xl_frame.read()
+        trash = [trash_large, trash_small, trash_xl, duck, lamp]
+    coroutines = []
     curses.update_lines_cols()
     curses.wrapper(draw)
