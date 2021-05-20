@@ -8,6 +8,7 @@ from random import choice, randint
 
 from curses_tools import draw_frame, read_controls, get_frame_size
 from explosion import explode
+from game_scenario import get_garbage_delay_tics, PHRASES
 from obstacles import Obstacle, show_obstacles
 from physics import update_speed
 
@@ -134,18 +135,26 @@ async def blink(canvas, row, column, symbol='*'):
 
 def get_play_canvas(canvas):
     max_rows_canvas, max_columns_canvas = canvas.getmaxyx()
-    max_rows = max_rows_canvas - PADDING_CANVAS
+    max_rows = max_rows_canvas - PADDING_CANVAS  - 1
     max_columns = max_columns_canvas - PADDING_CANVAS
+
     return PlayCanvas(Rows(MIN_ROWS, max_rows),
                       Columns(MIN_COLUMNS, max_columns))
 
 
+
 def draw(canvas):
     curses.curs_set(False)
-    canvas.border()
     canvas.nodelay(True)
 
     play_canvas = get_play_canvas(canvas)
+    info_canvas = canvas.derwin(1, play_canvas.columns.max + 2, play_canvas.rows.max, 0)
+    info_canvas.nodelay(True)
+
+    game_canvas = canvas.derwin(play_canvas.rows.max, play_canvas.columns.max + 2, 0, 0)
+    game_canvas.border()
+    game_canvas.nodelay(True)
+
     center = play_canvas.rows.max / 2, play_canvas.columns.max / 2
 
     coroutines.extend([blink(canvas, randint(*play_canvas.rows),
@@ -156,6 +165,8 @@ def draw(canvas):
     coroutines.append(run_spaceship(canvas,*center))
     coroutines.append(fill_orbit_with_garbage(canvas, play_canvas.columns.max))
     coroutines.append(show_obstacles(canvas, obstacles))
+    coroutines.append(show_year(info_canvas))
+    coroutines.append(next_year())
 
     while True:
         for coroutine in coroutines.copy():
@@ -165,7 +176,7 @@ def draw(canvas):
                 coroutines.remove(coroutine)
         if len(coroutines) == 0:
             break
-        canvas.border()
+        game_canvas.border()
         canvas.refresh()
         time.sleep(TIC_TIMEOUT)
 
@@ -199,9 +210,14 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
 
 async def fill_orbit_with_garbage(canvas, columns):
     while True:
+        delay_play_garbage = get_garbage_delay_tics(year)
+        if not delay_play_garbage:
+            await sleep()
+            continue
+
         random_column = randint(1, columns - 1)
         coroutines.append(fly_garbage(canvas, column=random_column, garbage_frame=choice(trash)))
-        await sleep(10)
+        await sleep(delay_play_garbage)
 
 
 async def show_gameover(canvas, row, column):
@@ -210,6 +226,24 @@ async def show_gameover(canvas, row, column):
         draw_frame(canvas, row_center, column_center, game_ower)
         await sleep()
 
+
+async def show_year(block):
+    _, cols = block.getmaxyx()
+    global year
+    while True:
+        if PHRASES.get(year):
+            curent_phrases = PHRASES[year]
+        body = '{year} - {text}'.format(year=int(year), text=curent_phrases)
+        draw_frame(block, 0, round((cols - len(body)) / 2), body)
+        await sleep()
+        draw_frame(block, 0, round((cols - len(body)) / 2), body, negative=False)
+
+
+async def next_year():
+    global year
+    while True:
+        await sleep(15)
+        year += 1
 
 if __name__ == '__main__':
     with open(f"{PATH_FRAMES}/rocket_frame_1.txt", "r") as rocket_frame_1, \
