@@ -29,9 +29,13 @@ async def sleep(tics=1):
         await asyncio.sleep(0)
 
 
-async def animate_spaceship(canvas, row, column):
-    row = round(row)
-    column = round(column)
+def center_in_frame(row, column, size_row, size_column):
+    return row - size_row / 2, column - size_column / 2
+
+
+async def run_spaceship(canvas, row, column):
+    center_row = row = round(row)
+    center_column = column = round(column)
     row_speed = column_speed = 0
 
     for item in cycle([frame1, frame1, frame2, frame2]):
@@ -58,6 +62,12 @@ async def animate_spaceship(canvas, row, column):
         draw_frame(canvas, row + 1, (column - round(frame_columns / 2)), item)
         if space_pressed:
             coroutines.append(fire(canvas, row, column))
+        for obstacle in obstacles:
+            if obstacle.has_collision(row, column, frame_rows, frame_columns):
+                obstacles_in_last_collisions.append(obstacle)
+                draw_frame(canvas, row + 1, (column - round(frame_columns / 2)), item, negative=True)
+                await show_gameover(canvas, center_row, center_column)
+                return
         await sleep()
         draw_frame(canvas, row + 1, (column - round(frame_columns / 2)), item,
                    negative=True)
@@ -86,12 +96,12 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3,
     curses.beep()
 
     while MIN_ROWS < row < max_row and MIN_COLUMNS < column < max_column:
-        canvas.addstr(round(row), round(column), symbol)
         for obstacle in obstacles:
             if obstacle.has_collision(row, column):
                 obstacles_in_last_collisions.append(obstacle)
                 canvas.addstr(round(row), round(column), ' ')
                 return
+        canvas.addstr(round(row), round(column), symbol)
         await sleep()
         canvas.addstr(round(row), round(column), ' ')
         row += rows_speed
@@ -139,13 +149,14 @@ def draw(canvas):
     center = play_canvas.rows.max / 2, play_canvas.columns.max / 2
 
     coroutines.extend([blink(canvas, randint(*play_canvas.rows),
-                        randint(*play_canvas.columns),
-                        symbol=choice(SYMBOL_STARS)) for _ in
-                  range(COUNT_STARS)])
+                             randint(*play_canvas.columns),
+                             symbol=choice(SYMBOL_STARS)) for _ in
+                       range(COUNT_STARS)])
     coroutines.append(fire(canvas, *center))
-    coroutines.append(animate_spaceship(canvas, *center))
+    coroutines.append(run_spaceship(canvas,*center))
     coroutines.append(fill_orbit_with_garbage(canvas, play_canvas.columns.max))
     coroutines.append(show_obstacles(canvas, obstacles))
+
     while True:
         for coroutine in coroutines.copy():
             try:
@@ -175,7 +186,7 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
         if obstacle in obstacles_in_last_collisions:
             obstacles.remove(obstacle)
             draw_frame(canvas, row, column, garbage_frame, negative=True)
-            await explode(canvas, row + frame_size_row/2, column + frame_size_column/2)
+            await explode(canvas, row + frame_size_row / 2, column + frame_size_column / 2)
             return
 
         obstacle.row = row
@@ -192,9 +203,18 @@ async def fill_orbit_with_garbage(canvas, columns):
         coroutines.append(fly_garbage(canvas, column=random_column, garbage_frame=choice(trash)))
         await sleep(10)
 
+
+async def show_gameover(canvas, row, column):
+    row_center, column_center = center_in_frame(row, column, *get_frame_size(game_ower))
+    while True:
+        draw_frame(canvas, row_center, column_center, game_ower)
+        await sleep()
+
+
 if __name__ == '__main__':
     with open(f"{PATH_FRAMES}/rocket_frame_1.txt", "r") as rocket_frame_1, \
             open(f"{PATH_FRAMES}/rocket_frame_2.txt", "r") as rocket_frame_2, \
+            open(f"{PATH_FRAMES}/game_ower.txt", "r") as game_ower_frame, \
             open(f"{PATH_FRAMES}/hubble.txt", "r") as hubble_frame, \
             open(f"{PATH_FRAMES}/lamp.txt", "r") as lamp_frame, \
             open(f"{PATH_FRAMES}/trash_large.txt", "r") as trash_large_frame, \
@@ -203,14 +223,17 @@ if __name__ == '__main__':
             open(f"{PATH_FRAMES}/duck.txt", "r") as duck_frame:
         frame1 = rocket_frame_1.read()
         frame2 = rocket_frame_2.read()
+        game_ower = game_ower_frame.read()
+        hubble = hubble_frame.read()
         duck = duck_frame.read()
         lamp = lamp_frame.read()
         trash_large = trash_large_frame.read()
         trash_small = trash_small_frame.read()
         trash_xl = trash_xl_frame.read()
-        trash = [trash_large, trash_small, trash_xl, duck, lamp]
+        trash = [trash_large, trash_small, trash_xl, duck, lamp, hubble]
     coroutines = []
     obstacles = []
+    year = 1957
     obstacles_in_last_collisions = []
     curses.update_lines_cols()
     curses.wrapper(draw)
